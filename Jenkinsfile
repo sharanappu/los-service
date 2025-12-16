@@ -1,28 +1,50 @@
 pipeline {
-  agent any
-  environment {
-    AWS_REGION = 'ap-south-1'
-    ECR_REGISTRY = '123456789012.dkr.ecr.ap-south-1.amazonaws.com' // REPLACE with your account
-    IMAGE_NAME = 'los-service'
-    IMAGE_TAG = "${env.BUILD_NUMBER}"
-  }
-  stages {
-    stage('Checkout') { steps { checkout scm } }
-    stage('Build') { steps { sh 'mvn -B -DskipTests package' } }
-    stage('Unit Tests') { steps { sh 'mvn test || true'; junit 'target/surefire-reports/*.xml' } }
-    stage('Build Docker') { steps { sh 'docker build -t ${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .' } }
-    stage('Push to ECR') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'aws-jenkins-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-          sh '''
-            aws configure set region ${AWS_REGION}
-            aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
-            aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
-            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-            docker push ${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-          '''
-        }
-      }
+    agent any
+
+    tools {
+        jdk 'jdk17'
+        maven 'maven'
     }
-  }
+
+    environment {
+        IMAGE_NAME = "los-service:local"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/sharanappu/los-service.git'
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                sh 'mvn -B -DskipTests clean package'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME} ."
+            }
+        }
+
+        stage('Run Docker Container') {
+            steps {
+                sh "docker rm -f los || true"
+                sh "docker run -d -p 8080:8080 --name los ${IMAGE_NAME}"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'LOS service deployed successfully!'
+        }
+        failure {
+            echo 'Build failed. Check logs!'
+        }
+    }
 }
+
