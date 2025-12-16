@@ -33,7 +33,7 @@ pipeline {
         stage('Run Docker Container') {
             steps {
                 sh "docker rm -f los || true"
-                sh "docker run -d -p 8080:8080 --name los ${IMAGE_NAME}"
+                sh "docker run -d -p 8081:8080 --name los ${IMAGE_NAME}"
             }
         }
     }
